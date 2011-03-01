@@ -47,6 +47,17 @@ public class AllTests extends TestCase {
     suite.addTestSuite(InputStreamIteratorTest.class);
     suite.addTestSuite(RangeInputFormatTest.class);
     suite.addTestSuite(RangeRecordReaderTest.class);
+
+    // Reducer stuff
+    suite.addTestSuite(IntermediateInputFormatTest.class);
+    suite.addTestSuite(IntermediateRecordReaderTest.class);
+    suite.addTestSuite(KeyedValueListShardTest.class);
+    suite.addTestSuite(ReducingMapperTest.class);
+    suite.addTestSuite(ShardKeyRangeTest.class);
+    suite.addTestSuite(LongOutputKeyTest.class);
+    suite.addTestSuite(WritableOutputKeyTest.class);
+    suite.addTestSuite(OutputKeyRangeTest.class);
+    
     return suite;
   }
 }

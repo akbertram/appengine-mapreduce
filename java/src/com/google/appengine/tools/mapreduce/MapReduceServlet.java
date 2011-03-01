@@ -16,53 +16,31 @@
 
 package com.google.appengine.tools.mapreduce;
 
-import com.google.appengine.api.datastore.Cursor;
-import com.google.appengine.api.datastore.DatastoreService;
-import com.google.appengine.api.datastore.DatastoreServiceFactory;
-import com.google.appengine.api.datastore.EntityNotFoundException;
-import com.google.appengine.api.datastore.Key;
+import com.google.appengine.api.datastore.*;
 import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.TaskAlreadyExistsException;
 import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.memcache.MemcacheServiceFactory;
 import com.google.common.base.Preconditions;
-
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.mapreduce.Counter;
-import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.hadoop.mapreduce.Counters;
-import org.apache.hadoop.mapreduce.InputFormat;
-import org.apache.hadoop.mapreduce.InputSplit;
-import org.apache.hadoop.mapreduce.JobID;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.OutputCommitter;
-import org.apache.hadoop.mapreduce.RecordReader;
-import org.apache.hadoop.mapreduce.RecordWriter;
-import org.apache.hadoop.mapreduce.StatusReporter;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
-import org.apache.hadoop.mapreduce.TaskID;
+import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.Mapper.Context;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
 /**
  * Servlet for all MapReduce API related functions.
@@ -518,7 +496,8 @@ public class MapReduceServlet extends HttpServlet {
       aggregateState(mrState, shardStates);
       mrState.setActiveShardCount(activeShardStates.size());
       mrState.setShardCount(shardStates.size());
-      
+      mrState.setOutputKeyRange(OutputKeyRange.aggregate(shardStates));
+
       if (activeShardStates.size() == 0) {
         mrState.setDone();
       } else {
@@ -530,7 +509,12 @@ public class MapReduceServlet extends HttpServlet {
         scheduleController(request, context, context.getSliceNumber() + 1);
       } else {
         deleteAllShards(shardStates);
-        if (context.hasDoneCallback()) {
+
+        if (!context.isReducer() && context.hasReducer() && !mrState.getOutputKeyRange().isEmpty()) {
+          handleStart(reducerConfigFromMapperConfig(context.getJobID(), mrState),
+              mrState.getName() + " [Reducer]", request);
+
+        } else if (context.hasDoneCallback()) {
           scheduleDoneCallback(
               context.getDoneCallbackQueue(), context.getDoneCallbackUrl(),
               context.getJobID().toString());
@@ -542,6 +526,28 @@ public class MapReduceServlet extends HttpServlet {
       return;
     }
   }
+
+  private Configuration reducerConfigFromMapperConfig(JobID mapperJobID, MapReduceState mapperState) {
+
+    Configuration reducerConfig = ConfigurationXmlUtil
+        .getConfigurationFromXml(mapperState.getConfigurationXML());
+
+    // define input for the reducing "mapper" as a function of our just completed mapping job
+    reducerConfig.set("mapreduce.inputformat.class", IntermediateInputFormat.class.getName());
+    reducerConfig.set(IntermediateInputFormat.MAPPER_JOBID_KEY, mapperJobID.toString());
+    reducerConfig.set(IntermediateInputFormat.MIN_OUTPUT_KEY, mapperState.getOutputKeyRange().getMinKey());
+    reducerConfig.set(IntermediateInputFormat.MAX_OUTPUT_KEY, mapperState.getOutputKeyRange().getMaxKey());
+
+    // defined the "mapper" that handles the reduction process
+    reducerConfig.set("mapreduce.map.class", ReducingMapper.class.getName());
+    
+    if(reducerConfig.get(AppEngineJobContext.REDUCER_SHARD_COUNT_KEY) != null) {
+      reducerConfig.set(AppEngineJobContext.MAPPER_SHARD_COUNT_KEY,
+          reducerConfig.get(AppEngineJobContext.REDUCER_SHARD_COUNT_KEY));
+    }
+    return reducerConfig;
+  }
+
 
   private void scheduleDoneCallback(Queue queue, String url, String jobId) {
     String taskName = ("done_callback" + jobId).replace('_', '-');
@@ -648,10 +654,12 @@ public class MapReduceServlet extends HttpServlet {
       InputSplit split = taskAttemptContext.getInputSplit();
       RecordReader<INKEY, INVALUE> reader = 
           (RecordReader<INKEY,INVALUE>) taskAttemptContext.getRecordReader(split);
+      RecordWriter<OUTKEY, OUTVALUE> writer =
+          (RecordWriter<OUTKEY, OUTVALUE>) new IntermediateWriter(ds, taskAttemptContext);
       DatastorePersistingStatusReporter reporter =
           new DatastorePersistingStatusReporter(taskAttemptContext.getShardState());
       AppEngineMapper.AppEngineContext context = getMapperContext(
-          taskAttemptContext, mapper, split, reader, reporter);
+          taskAttemptContext, mapper, split, reader, writer, reporter);
       
       if (jobContext.getSliceNumber() == 0) {
         // This is the first invocation for this mapper.
@@ -721,6 +729,7 @@ public class MapReduceServlet extends HttpServlet {
       AppEngineMapper<INKEY, INVALUE, OUTKEY, OUTVALUE> mapper, 
       InputSplit split,
       RecordReader<INKEY, INVALUE> reader,
+      RecordWriter<OUTKEY, OUTVALUE> writer,
       StatusReporter reporter) throws InvocationTargetException {
     Constructor<AppEngineMapper.AppEngineContext> contextConstructor;
     try {
@@ -742,7 +751,7 @@ public class MapReduceServlet extends HttpServlet {
               taskAttemptContext.getConfiguration(), 
               taskAttemptContext.getTaskAttemptID(), 
               reader, 
-              null, /* not yet implemented */ 
+              writer,
               null, /* not yet implemented */
               reporter,
               split

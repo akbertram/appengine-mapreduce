@@ -16,29 +16,9 @@
 
 package com.google.appengine.tools.mapreduce;
 
-import static com.google.appengine.api.datastore.FetchOptions.Builder.withPrefetchSize;
-
-import com.google.appengine.api.datastore.Blob;
-import com.google.appengine.api.datastore.Cursor;
-import com.google.appengine.api.datastore.DatastoreService;
-import com.google.appengine.api.datastore.Entity;
-import com.google.appengine.api.datastore.EntityNotFoundException;
-import com.google.appengine.api.datastore.FetchOptions;
-import com.google.appengine.api.datastore.Key;
-import com.google.appengine.api.datastore.KeyFactory;
-import com.google.appengine.api.datastore.Query;
-import com.google.appengine.api.datastore.QueryResultIterator;
-import com.google.appengine.api.datastore.Text;
+import com.google.appengine.api.datastore.*;
 import com.google.common.base.Preconditions;
-
-import com.googlecode.charts4j.AxisLabelsFactory;
-import com.googlecode.charts4j.BarChart;
-import com.googlecode.charts4j.Data;
-import com.googlecode.charts4j.DataUtil;
-import com.googlecode.charts4j.GCharts;
-import com.googlecode.charts4j.Plot;
-import com.googlecode.charts4j.Plots;
-
+import com.googlecode.charts4j.*;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.hadoop.mapreduce.Counters;
@@ -50,6 +30,8 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import static com.google.appengine.api.datastore.FetchOptions.Builder.withPrefetchSize;
 
 /**
  * Wrapper for the MapReduceState entity that holds state for
@@ -71,7 +53,8 @@ public class MapReduceState {
   public static final String SHARD_COUNT_PROPERTY = "shardCount";
   public static final String START_TIME_PROPERTY = "startTime";
   public static final String STATUS_PROPERTY = "status";
-  
+  public static final String OUTPUT_KEY_RANGE = "outputKeys";
+
   /**
    * Possible states of the status property
    */
@@ -231,6 +214,23 @@ public class MapReduceState {
     entity.setUnindexedProperty(COUNTERS_MAP_PROPERTY, 
         new Blob(Writables.createByteArrayFromWritable(counters)));
   }
+
+  /**
+   * Reconstitutes an OutputKeyRange object from a shard state entity.
+   */
+  public OutputKeyRange getOutputKeyRange() {
+    Blob serializedRange = (Blob) entity.getProperty(OUTPUT_KEY_RANGE);
+    OutputKeyRange keyRange = new OutputKeyRange();
+    Writables.initializeWritableFromByteArray(serializedRange.getBytes(), keyRange);
+
+    return keyRange;
+  }
+
+  public void setOutputKeyRange(OutputKeyRange range) {
+    entity.setUnindexedProperty(OUTPUT_KEY_RANGE,
+        new Blob(Writables.createByteArrayFromWritable(range)));
+  }
+
   
   private void checkComplete() {
     Preconditions.checkNotNull(getConfigurationXML(), "Configuration must be set.");

@@ -71,6 +71,7 @@ public abstract class AppEngineMapper<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
                             StatusReporter reporter,
                             InputSplit split) throws IOException, InterruptedException {
       super(conf, taskid, reader, writer, committer, reporter, split);
+      this.writer = writer;
     }
 
     /**
@@ -102,9 +103,12 @@ public abstract class AppEngineMapper<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       return mutationPool;
     }
 
-    public void flush() {
+    public void flush() throws IOException {
       if (mutationPool != null) {
         mutationPool.flush();
+      }
+      if (writer != null) {
+        ((IntermediateWriter)writer).flush();
       }
     }
   }

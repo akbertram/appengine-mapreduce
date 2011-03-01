@@ -16,15 +16,7 @@
 
 package com.google.appengine.tools.mapreduce;
 
-import static org.easymock.EasyMock.expect;
-import static org.easymock.classextension.EasyMock.createMock;
-import static org.easymock.classextension.EasyMock.replay;
-import static org.easymock.classextension.EasyMock.verify;
-
-import com.google.appengine.api.datastore.DatastoreService;
-import com.google.appengine.api.datastore.DatastoreServiceFactory;
-import com.google.appengine.api.datastore.EntityNotFoundException;
-import com.google.appengine.api.datastore.Query;
+import com.google.appengine.api.datastore.*;
 import com.google.appengine.api.taskqueue.dev.LocalTaskQueue;
 import com.google.appengine.api.taskqueue.dev.QueueStateInfo;
 import com.google.appengine.api.taskqueue.dev.QueueStateInfo.TaskStateInfo;
@@ -33,35 +25,24 @@ import com.google.appengine.tools.development.testing.LocalDatastoreServiceTestC
 import com.google.appengine.tools.development.testing.LocalMemcacheServiceTestConfig;
 import com.google.appengine.tools.development.testing.LocalServiceTestHelper;
 import com.google.appengine.tools.development.testing.LocalTaskQueueTestConfig;
-
 import junit.framework.TestCase;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.mapreduce.Counter;
-import org.apache.hadoop.mapreduce.Counters;
-import org.apache.hadoop.mapreduce.InputFormat;
-import org.apache.hadoop.mapreduce.InputSplit;
-import org.apache.hadoop.mapreduce.JobID;
-import org.apache.hadoop.mapreduce.RecordReader;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
-import org.apache.hadoop.mapreduce.TaskID;
+import org.apache.hadoop.mapreduce.*;
 import org.easymock.EasyMock;
 import org.json.JSONObject;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
 
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
+import java.util.*;
+
+import static org.easymock.EasyMock.expect;
+import static org.easymock.classextension.EasyMock.*;
 
 /**
  * Tests MapReduceServlet
@@ -568,7 +549,48 @@ public class MapReduceServletTest extends TestCase {
          + taskInfo.getBody(), taskInfo.getBody().contains("job_foo_0001"));
     verify(request);
   }
+
+  /**
+   * Test that the controller starts the reducer "mapping" job
+   */
+  public void testHandleController_withReducer() {
+    JobID jobId = new JobID("foo", 1);
+    HttpServletRequest request = createMockControllerRequest(0, jobId);
+    replay(request);
+
+    Configuration sampleConf = getSampleMapReduceConfiguration();
+    sampleConf.set("mapreduce.reduce.class", "IntSum");
+    persistMRState(jobId, sampleConf);
+
+    OutputKeyRange outputKeyRange = new OutputKeyRange();
+    outputKeyRange.addKey("A");
+    outputKeyRange.addKey("Z");
+
+    ShardState shardState1 = ShardState.generateInitializedShardState(ds,
+        new TaskAttemptID(new TaskID(jobId, true, 1), 1));
+    Counters counters1 = new Counters();
+    counters1.findCounter("a", "z").increment(1);
+    shardState1.setCounters(counters1);
+    shardState1.setOutputKeyRange(outputKeyRange);
+    shardState1.setInputSplit(sampleConf, new StubInputSplit(1));
+    shardState1.setRecordReader(sampleConf, new StubRecordReader());
+    shardState1.setDone();
+    shardState1.persist();
+
+    servlet.handleController(request, null);
+
+    assertEquals("Controller should add reducer callbacks for controller and 2 shards.",
+        3, getDefaultQueueInfo().getCountTasks());
+    TaskStateInfo taskInfo =getDefaultQueueInfo().getTaskInfo().get(0);
+    assertEquals("Controller should add done callback url.",
+        "/mapreduce/mapperCallback", taskInfo.getUrl());
   
+    verify(request);
+
+
+  }
+
+
   public void testHandleStart() {
     HttpServletRequest request = createMockStartRequest(getSampleMapReduceConfiguration());
     replay(request);

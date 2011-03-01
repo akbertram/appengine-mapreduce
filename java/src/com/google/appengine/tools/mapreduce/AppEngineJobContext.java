@@ -42,7 +42,7 @@ public class AppEngineJobContext extends JobContext {
   // TODO(frew): Make these private after we figure out our equivalent of JobConf.
   
   // Key names for values serialized in the configuration
-  
+
   /**
    * The {@code Configuration} key for the entry naming the task queue to 
    * enqueue controller tasks in.
@@ -76,6 +76,13 @@ public class AppEngineJobContext extends JobContext {
   public static final String MAPPER_SHARD_COUNT_KEY = "mapreduce.mapper.shardcount";
 
   /**
+   * THe {@code Configuration} key for the entry denoting the number of parallel
+   * reducer worker shards to start in parallel.
+   */
+  public static final String REDUCER_SHARD_COUNT_KEY = "mapreduce.reducer.shardcount";
+
+
+  /**
    * The {@code Configuration} key for the entry containing the URL to be given
    * to the task queue for the done callback.
    */
@@ -99,7 +106,7 @@ public class AppEngineJobContext extends JobContext {
   
   // Current request
   private final HttpServletRequest request;
-  
+
   /**
    * Initializes a JobContext from a request.
    * 
@@ -252,6 +259,18 @@ public class AppEngineJobContext extends JobContext {
    */
   public boolean hasDoneCallback() {
     return getDoneCallbackUrl() != null;
+  }
+  
+  public boolean hasReducer() {
+    return getConfiguration().get(REDUCE_CLASS_ATTR) != null;
+  }
+
+  public boolean isReducer() {
+    try {
+      return getMapperClass().equals(ReducingMapper.class);
+    } catch (ClassNotFoundException e) {
+      return false;
+    }
   }
 
   /**

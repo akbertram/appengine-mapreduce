@@ -49,6 +49,7 @@ class ShardState {
   // Property names in the shard state entity
   // VisibleForTesting
   static final String COUNTERS_MAP_PROPERTY = "countersMap";
+  static final String OUTPUT_KEY_RANGE = "outputKeys";
   static final String INPUT_SPLIT_PROPERTY = "inputSplit";
   static final String INPUT_SPLIT_CLASS_PROPERTY = "inputSplitClass";
   static final String JOB_ID_PROPERTY = "jobId";
@@ -173,7 +174,25 @@ class ShardState {
     entity.setUnindexedProperty(COUNTERS_MAP_PROPERTY, 
         new Blob(Writables.createByteArrayFromWritable(counters)));
   }
-  
+
+  /**
+   * Reconstitutes an OutputKeyRange object from a shard state entity.
+   */
+  public OutputKeyRange getOutputKeyRange() {
+    Blob serializedRange = (Blob) entity.getProperty(OUTPUT_KEY_RANGE);
+    OutputKeyRange keyRange = new OutputKeyRange();
+    if(serializedRange != null) {
+      Writables.initializeWritableFromByteArray(serializedRange.getBytes(), keyRange);
+    }
+
+    return keyRange;
+  }
+
+  public void setOutputKeyRange(OutputKeyRange range) {
+    entity.setUnindexedProperty(OUTPUT_KEY_RANGE,
+        new Blob(Writables.createByteArrayFromWritable(range)));
+  }
+
   /**
    * Get the status string from the shard state. This is a user-defined
    * message, intended to inform a human of the status of the current shard.
