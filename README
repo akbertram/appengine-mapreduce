@@ -1,15 +1,6 @@
 AppEngine Mapreduce library
 ===========================
 
-Official site: http://code.google.com/p/appengine-mapreduce/
+This is a fork of the java version of the AppEngine Map/Reduce library under development by AppEngine users.
+http://code.google.com/p/appengine-mapreduce/
 
-Check the site for up to date status, latest version, getting started & user
-guides and other documentation.
-
-Archive contents:
-- python         : python version of the library resides here
-  - build.sh     : use this to run tests for python library, build and run demo app
-  - src          : python source code for mapreduce library
-  - tests        : tests for mapreduce library
-- java           : java version of the library
-  - build.xml    : ant build file
