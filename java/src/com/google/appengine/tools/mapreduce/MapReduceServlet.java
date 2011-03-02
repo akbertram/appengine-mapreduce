@@ -16,11 +16,15 @@
 
 package com.google.appengine.tools.mapreduce;
 
+import com.google.appengine.api.blobstore.BlobstoreFailureException;
 import com.google.appengine.api.datastore.*;
 import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.TaskAlreadyExistsException;
 import com.google.appengine.api.taskqueue.TaskOptions;
+import com.google.appengine.api.memcache.MemcacheServiceException;
 import com.google.appengine.api.memcache.MemcacheServiceFactory;
+import com.google.appengine.tools.mapreduce.ShardState.Status;
+import com.google.apphosting.api.DeadlineExceededException;
 import com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.*;
@@ -97,7 +101,6 @@ public class MapReduceServlet extends HttpServlet {
   static final String ABORT_JOB_PATH = "abort_job";
   static final String GET_JOB_DETAIL_PATH = "get_job_detail";
   static final String START_JOB_PATH = "start_job";
-
 
   private DatastoreService ds = DatastoreServiceFactory.getDatastoreService();
   private Clock clock = new SystemClock();
@@ -491,17 +494,24 @@ public class MapReduceServlet extends HttpServlet {
       MapReduceState mrState = MapReduceState.getMapReduceStateFromJobID(
           ds, context.getJobID());
       
-      List<ShardState> activeShardStates = selectActiveShards(shardStates);
-      
-      aggregateState(mrState, shardStates);
-      mrState.setActiveShardCount(activeShardStates.size());
-      mrState.setShardCount(shardStates.size());
-      mrState.setOutputKeyRange(OutputKeyRange.aggregate(shardStates));
-
-      if (activeShardStates.size() == 0) {
-        mrState.setDone();
+      if(hasShardsInError(shardStates)) {
+        mrState.setActiveShardCount(0);
+        mrState.setShardCount(shardStates.size());
+        mrState.setError();
+        
       } else {
-        refillQuotas(context, mrState, activeShardStates);
+        List<ShardState> activeShardStates = selectActiveShards(shardStates);
+        
+        aggregateState(mrState, shardStates);
+        mrState.setActiveShardCount(activeShardStates.size());
+        mrState.setShardCount(shardStates.size());
+        mrState.setOutputKeyRange(OutputKeyRange.aggregate(shardStates));
+  
+        if (activeShardStates.size() == 0) {
+          mrState.setDone();
+        } else {
+          refillQuotas(context, mrState, activeShardStates);
+        }
       }
       mrState.persist();
       
@@ -525,6 +535,15 @@ public class MapReduceServlet extends HttpServlet {
                  + ". Aborting!");
       return;
     }
+  }
+
+  private boolean hasShardsInError(List<ShardState> shardStates) {
+    for(ShardState state : shardStates) {
+      if(state.getStatus() == Status.ERROR) {
+        return true;
+      } 
+    }
+    return false;
   }
 
   private Configuration reducerConfigFromMapperConfig(JobID mapperJobID, MapReduceState mapperState) {
@@ -645,6 +664,9 @@ public class MapReduceServlet extends HttpServlet {
     AppEngineJobContext jobContext = new AppEngineJobContext(request, false);
     AppEngineTaskAttemptContext taskAttemptContext = new AppEngineTaskAttemptContext(
         request, jobContext, ds);
+    DatastorePersistingStatusReporter reporter =
+      new DatastorePersistingStatusReporter(taskAttemptContext.getShardState());
+    
     long startTime = clock.currentTimeMillis();
     log.fine("Running worker: " + taskAttemptContext.getTaskAttemptID() + " " 
         + jobContext.getSliceNumber());
@@ -656,8 +678,7 @@ public class MapReduceServlet extends HttpServlet {
           (RecordReader<INKEY,INVALUE>) taskAttemptContext.getRecordReader(split);
       RecordWriter<OUTKEY, OUTVALUE> writer =
           (RecordWriter<OUTKEY, OUTVALUE>) new IntermediateWriter(ds, taskAttemptContext);
-      DatastorePersistingStatusReporter reporter =
-          new DatastorePersistingStatusReporter(taskAttemptContext.getShardState());
+
       AppEngineMapper.AppEngineContext context = getMapperContext(
           taskAttemptContext, mapper, split, reader, writer, reporter);
       
@@ -688,20 +709,26 @@ public class MapReduceServlet extends HttpServlet {
         // This is the last invocation for this mapper.
         mapper.cleanup((Context) context);
       }
-    } catch (IOException ioe) {
-      // TODO(frew): Currently all user errors result in retry. We should
-      // figure out some way to differentiate which should be fatal (or
-      // maybe just have a memcache counter for each shard that causes us
-      // to bail on repeated errors).
-      throw new RuntimeException(ioe);
-    } catch (SecurityException e) {
-      throw new RuntimeException(
-          "MapReduce framework doesn't have permission to instantiate classes.", e);
-    } catch (InvocationTargetException e) {
-      throw new RuntimeException("Got exception instantiating Mapper.Context", e);
-    } catch (InterruptedException e) {
-      throw new RuntimeException(
-          "Got InterruptedException running Mapper. This should never happen.", e);
+    } catch (Exception e) {
+      rethrowIfTransient(e);
+      reporter.setStatus(e.getClass().getSimpleName() + ": " + e.getMessage());
+      reporter.setError();
+      reporter.persist();
+    }
+  }
+
+  private void rethrowIfTransient(Exception e) {
+    if (e instanceof BlobstoreFailureException) {
+      throw (BlobstoreFailureException)e;
+    }
+    if(e instanceof DatastoreTimeoutException) {
+      throw (DatastoreTimeoutException)e;
+    }
+    if(e instanceof DeadlineExceededException) {
+      throw (DeadlineExceededException)e;
+    }
+    if(e instanceof MemcacheServiceException) {
+      throw (MemcacheServiceException)e;
     }
   }
 

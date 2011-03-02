@@ -60,7 +60,7 @@ public class MapReduceState {
    */
   public static enum Status {
     ACTIVE,
-    DONE
+    DONE, ERROR
   }
   
   // DatastoreService to persist the state to
@@ -248,7 +248,15 @@ public class MapReduceState {
    * Sets the status to "done"
    */
   public void setDone() {
-    entity.setProperty(STATUS_PROPERTY, "" + Status.DONE);
+    entity.setProperty(STATUS_PROPERTY, Status.DONE.name());
+  }
+  
+  /**
+   * Sets the status to "error"
+   */
+  public void setError() {
+    entity.setProperty(STATUS_PROPERTY, Status.ERROR.name());
+    
   }
   
   /**

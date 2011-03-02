@@ -70,7 +70,11 @@ class DatastorePersistingStatusReporter extends StatusReporter {
   public void setStatus(String status) {
     this.status = status;
   }
-
+  
+  public void setError() {
+    this.shardState.setError();
+  }
+  
   /**
    * Persist the underlying state of this shard.
    */
@@ -79,4 +83,5 @@ class DatastorePersistingStatusReporter extends StatusReporter {
     shardState.setStatusString(status);
     shardState.persist();
   }
+
 }

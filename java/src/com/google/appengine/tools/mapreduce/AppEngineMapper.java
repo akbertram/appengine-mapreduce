@@ -53,7 +53,9 @@ import java.io.IOException;
  * @author frew@google.com (Fred Wulff)
  */
 public abstract class AppEngineMapper<KEYIN,VALUEIN,KEYOUT,VALUEOUT> 
-    extends Mapper<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
+extends Mapper<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
+
+
 
   /**
    * A Context that holds a datastore mutation pool.
@@ -62,14 +64,15 @@ public abstract class AppEngineMapper<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
     private DatastoreMutationPool mutationPool;
     private int datastoreMutationPoolCountLimit = DatastoreMutationPool.DEFAULT_COUNT_LIMIT;
     private int datastoreMutationPoolSizeLimit = DatastoreMutationPool.DEFAULT_SIZE_LIMIT;
+    private RecordWriter<KEYOUT, VALUEOUT> writer;
 
     public AppEngineContext(Configuration conf,
-                            TaskAttemptID taskid,
-                            RecordReader<KEYIN, VALUEIN> reader,
-                            RecordWriter<KEYOUT, VALUEOUT> writer,
-                            OutputCommitter committer,
-                            StatusReporter reporter,
-                            InputSplit split) throws IOException, InterruptedException {
+        TaskAttemptID taskid,
+        RecordReader<KEYIN, VALUEIN> reader,
+        RecordWriter<KEYOUT, VALUEOUT> writer,
+        OutputCommitter committer,
+        StatusReporter reporter,
+        InputSplit split) throws IOException, InterruptedException {
       super(conf, taskid, reader, writer, committer, reporter, split);
       this.writer = writer;
     }
@@ -112,7 +115,7 @@ public abstract class AppEngineMapper<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
       }
     }
   }
-  
+
   /**
    * App Engine mappers have no {@code run(Context)} method, since it would
    * have to span multiple task queue invocations. Therefore, calling this
@@ -124,36 +127,36 @@ public abstract class AppEngineMapper<KEYIN,VALUEIN,KEYOUT,VALUEOUT>
   public final void run(Context context) {
     throw new UnsupportedOperationException("AppEngineMappers don't have run methods");
   }
-  
+
   @Override
   public void setup(Context context) throws IOException, InterruptedException {
     super.setup(context);
     // Nothing
   }
-  
+
   /**
    * Run at the start of each task queue invocation.
    */
   public void taskSetup(Context context) throws IOException, InterruptedException {
     // Nothing
   }
-  
+
   @Override
   public void cleanup(Context context) throws IOException, InterruptedException {
     super.cleanup(context);
     // Nothing
   }
-  
+
   /**
    * Run at the end of each task queue invocation. The default flushes the context.
    */
   public void taskCleanup(Context context) throws IOException, InterruptedException {
     getAppEngineContext(context).flush();
   }
-  
+
   @Override
   public void map(KEYIN key, VALUEIN value, Context context) 
-      throws IOException, InterruptedException {
+  throws IOException, InterruptedException {
     // Nothing (super does the identity map function, which is a bad idea since
     // we don't support shuffle/reduce yet).
   }

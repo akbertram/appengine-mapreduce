@@ -5,6 +5,7 @@ import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
 import static org.easymock.EasyMock.isA;
 import static org.easymock.classextension.EasyMock.createMock;
+import static org.easymock.classextension.EasyMock.createNiceMock;
 import static org.easymock.classextension.EasyMock.replay;
 import static org.easymock.classextension.EasyMock.verify;
 
@@ -13,6 +14,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import java.util.logging.Logger;
 
 import junit.framework.TestCase;
 
@@ -31,6 +33,7 @@ import com.google.appengine.api.datastore.Key;
 import com.google.appengine.api.datastore.Query;
 import com.google.appengine.tools.development.testing.LocalDatastoreServiceTestConfig;
 import com.google.appengine.tools.development.testing.LocalServiceTestHelper;
+import com.google.appengine.tools.mapreduce.IntermediateWriter.BuilderCache;
 import com.google.common.collect.Lists;
 
 public class IntermediateWriterTest extends TestCase {
@@ -41,6 +44,8 @@ public class IntermediateWriterTest extends TestCase {
           new LocalDatastoreServiceTestConfig());
 
   private TaskAttemptID taskAttemptID;
+  private IntermediateWriter.BuilderCache cache;
+  
   
   public void setUp() {
     helper.setUp();
@@ -50,8 +55,19 @@ public class IntermediateWriterTest extends TestCase {
     helper.tearDown();
   }
   
+  private BuilderCache createCache(int maxSize) {
+
+    AppEngineTaskAttemptContext context = createNiceMock(AppEngineTaskAttemptContext.class);
+    replay(context);
+    
+    IntermediateWriter writer = new IntermediateWriter(DatastoreServiceFactory.getDatastoreService(), 
+        context);
+    
+    return writer.getBuilderCache();
+  }
+  
   public void testBuilderCache() { 
-    IntermediateWriter.BuilderCache cache = new IntermediateWriter.BuilderCache(256);
+    IntermediateWriter.BuilderCache cache = createCache(256);
     KeyedValueListBuilder builder = new KeyedValueListBuilder(outputKey("A"), taskAttempt(1));
     
     assertNull(cache.get("A"));
@@ -62,7 +78,7 @@ public class IntermediateWriterTest extends TestCase {
   }
 
   public void testCacheEviction() throws IOException {
-    IntermediateWriter.BuilderCache cache = new IntermediateWriter.BuilderCache(8);
+    IntermediateWriter.BuilderCache cache = createCache(8);
    
     // add the first item to the list
     // we will still be under max size, so no evictions should occur
@@ -90,7 +106,7 @@ public class IntermediateWriterTest extends TestCase {
   
   public void testLRU() throws IOException {
 
-    IntermediateWriter.BuilderCache cache = new IntermediateWriter.BuilderCache(16);
+    IntermediateWriter.BuilderCache cache = createCache(16);
 
     // add the first item to the list
     // we will still be under max size, so no evictions should occur
@@ -162,7 +178,7 @@ public class IntermediateWriterTest extends TestCase {
     Capture<Iterable<Entity>> results = new Capture<Iterable<Entity>>();
     DatastoreService datastore = createMock(DatastoreService.class);
     expect(datastore.get(isA(Key.class))).andThrow(new EntityNotFoundException(null)).anyTimes();
-    expect(datastore.put(capture(results))).andReturn(null);
+    expect(datastore.put(capture(results))).andReturn(null).anyTimes();
     replay(datastore);
     
     ShardState shard = createMock(ShardState.class);
@@ -183,13 +199,25 @@ public class IntermediateWriterTest extends TestCase {
     
     IntermediateWriter writer = new IntermediateWriter(
         datastore,
-        context);
-    
-    writer.write(outputKey("A"), new LongWritable(71));
-    writer.write(outputKey("B"), new LongWritable(3));
-    writer.write(outputKey("A"), new LongWritable(13));
+        context, 
+        32 /* force the cache to be exercised */ );
+
+    for(int i=0;i!=100;++i) {
+      if(i%2==0) {
+        writer.write(outputKey("A"), new LongWritable(71));
+      } else {
+        writer.write(outputKey("B"), new LongWritable(3));
+      }
+    }
+
+    for(int i=0;i!=400;++i) {
+      writer.write(outputKey("A"), new LongWritable(13));
+    }
     writer.write(outputKey("B"), new LongWritable(11));
-    writer.write(outputKey("C"), new LongWritable(23));
+    
+    for(int i=0;i!=50;++i) {
+      writer.write(outputKey("C"), new LongWritable(23));
+    }
 
     writer.flush();
 
@@ -197,9 +225,9 @@ public class IntermediateWriterTest extends TestCase {
     
     List<Entity> combinedValues = Lists.newArrayList(results.getValue());
     assertEquals(3, combinedValues.size());
-    assertSingleResultWithValue(combinedValues, "A", 84);
-    assertSingleResultWithValue(combinedValues, "B", 14);
-    assertSingleResultWithValue(combinedValues, "C", 23);
+    assertSingleResultWithValue(combinedValues, "A", (71*50)+(400*13));
+    assertSingleResultWithValue(combinedValues, "B", (3*50) + 11);
+    assertSingleResultWithValue(combinedValues, "C", (50*23));
   }
   
   private void assertSingleResultWithValue(Iterable<Entity> entities, String name, long value) throws IOException {

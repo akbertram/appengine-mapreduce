@@ -1,36 +1,20 @@
 package com.google.appengine.tools.mapreduce;
 
-import java.io.IOException;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.io.DataInputBuffer;
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.RawComparator;
-import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.mapred.RawKeyValueIterator;
-import org.apache.hadoop.mapreduce.Counter;
-import org.apache.hadoop.mapreduce.OutputCommitter;
-import org.apache.hadoop.mapreduce.RecordWriter;
-import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.StatusReporter;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
-import org.apache.hadoop.util.Progress;
-import org.apache.hadoop.util.ReflectionUtils;
-
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.Entity;
-import com.google.appengine.repackaged.com.google.common.collect.Lists;
-import com.google.appengine.repackaged.com.google.common.collect.Maps;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.mapreduce.RecordWriter;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.TaskAttemptID;
+import org.apache.hadoop.util.ReflectionUtils;
+
+import java.io.IOException;
+import java.util.*;
+import java.util.logging.Logger;
 
 /**
  * A {@code RecordWriter} that writes the intermediate results of the mapping stage to the
@@ -48,9 +32,20 @@ public class IntermediateWriter extends RecordWriter<OutputKey, Writable> {
   private BuilderCache cache;
   private AppEngineReducer combiner;
   private Reducer.Context combinerContext;
+  
+  private static final Logger logger = Logger.getLogger(IntermediateWriter.class.getName());
+
 
   public IntermediateWriter(DatastoreService datastoreService, AppEngineTaskAttemptContext context) {
     this(datastoreService, context, DEFAULT_CACHE_SIZE);
+  }
+
+  public IntermediateWriter(DatastoreService datastoreService, AppEngineTaskAttemptContext context, int cacheSize) {
+    this.context = context;
+    this.datastoreService = datastoreService;
+
+    keyRange = context.getShardState().getOutputKeyRange();
+    cache = new BuilderCache(cacheSize);
     
     Class combinerClass;
     try {
@@ -62,15 +57,11 @@ public class IntermediateWriter extends RecordWriter<OutputKey, Writable> {
       combiner = (AppEngineReducer)ReflectionUtils.newInstance(combinerClass, context.getConfiguration());
     }
   }
-
-  public IntermediateWriter(DatastoreService datastoreService, AppEngineTaskAttemptContext context, int cacheSize) {
-    this.context = context;
-    this.datastoreService = datastoreService;
-
-    keyRange = context.getShardState().getOutputKeyRange();
-    cache = new BuilderCache(cacheSize);
+  
+  @VisibleForTesting
+  BuilderCache getBuilderCache() {
+    return cache;
   }
-
   
   public void write(OutputKey key, Writable value) throws IOException {
     updateRange(key);
@@ -107,12 +98,12 @@ public class IntermediateWriter extends RecordWriter<OutputKey, Writable> {
   }
 
   public void flush() throws IOException {
-    persist(cache.flush());
+    persist(combine(cache.flush()));
   }
 
   private void persist(Collection<KeyedValueListBuilder> builders) {
     List<Entity> shards = new ArrayList<Entity>();
-    for(KeyedValueListBuilder builder : combine(builders)) {
+    for(KeyedValueListBuilder builder : builders) {
       shards.add(builder.toEntity());
     }
     if(!shards.isEmpty()) {
@@ -146,7 +137,6 @@ public class IntermediateWriter extends RecordWriter<OutputKey, Writable> {
         combiner.reduce(builder.getOutputKey(), 
             new ShardedRawValueIterable(
                 new RawValueList(Collections.singletonList(builder.getBlob())), valueInstance), combinerContext);
-        
       }   
       
       return output.getBuilders();
@@ -172,7 +162,7 @@ public class IntermediateWriter extends RecordWriter<OutputKey, Writable> {
    * @author alex@bedatadriven.com
    *
    */
-  static class BuilderCache {
+  class BuilderCache {
     private Map<String, KeyedValueListBuilder> map = new HashMap<String, KeyedValueListBuilder>();
     private LinkedList<String> leastRecent = new LinkedList<String>();
 
@@ -201,16 +191,45 @@ public class IntermediateWriter extends RecordWriter<OutputKey, Writable> {
 
     public Collection<KeyedValueListBuilder> flush(int bytesWritten) {
       size += bytesWritten;
-      List<KeyedValueListBuilder> entities = new ArrayList<KeyedValueListBuilder>();
-      while(size > maxSize) {
-        String keyToEvict = leastRecent.pop();
-        KeyedValueListBuilder evictedBuilder = map.remove(keyToEvict);
+      
+      // if we've exceeded our cache limit, and we have a combiner,
+      // do a first combining pass to reduce our memory footprint
+      if(size > maxSize && combiner != null) {
+        int newSize = 0;
+        Collection<KeyedValueListBuilder> combinedBuilders = combine(map.values()); 
+        for(KeyedValueListBuilder combined : combinedBuilders) {
+          newSize += combined.size();
+          map.put(combined.getOutputKey().getKeyString(), combined);
+        }
+        size = newSize;
+      }
 
-        entities.add(evictedBuilder);
-        size -= evictedBuilder.size();
+      List<KeyedValueListBuilder> entitiesToWrite = new ArrayList<KeyedValueListBuilder>();
+
+      if(size > maxSize) {
+
+        // we want to avoid the situation where the cache fills up and
+        // every time we write a new value we have to evict another single key/value
+        // rather, we'd prefer to evict a bunch old entries in one go.
+
+        // there's probably a elegant adaptive algorithm, but the
+        // following will do till it gets here.
+
+        while(size > (maxSize/2)) {
+          String keyToEvict = leastRecent.pop();
+          KeyedValueListBuilder evictedBuilder = map.remove(keyToEvict);
+
+          entitiesToWrite.add(evictedBuilder);
+          size -= evictedBuilder.size();
+        }
+
+        if(!entitiesToWrite.isEmpty()) {
+          logger.info("Evicting " + entitiesToWrite.size() + " entities from builder cache");
+        }
       }
       
-      return entities;
+      
+      return entitiesToWrite;
     }
     
     public Collection<KeyedValueListBuilder> flush() {

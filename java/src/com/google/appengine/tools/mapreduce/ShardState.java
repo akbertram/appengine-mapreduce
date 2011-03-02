@@ -63,8 +63,27 @@ class ShardState {
    * Possible states of the status property
    */
   public static enum Status {
+    
+    /**
+     * This shard is currently processing inputs
+     */
     ACTIVE,
-    DONE
+    
+    /**
+     * This shard has processed all inputs in its split
+     */
+    DONE,
+    
+    /**
+     * This shard failed due to a non-recoverable
+     */
+    FAILED,
+    
+    /**
+     * An non-transient, non-recoverable error was encountered while processing this 
+     * shard
+     */
+    ERROR
   }
   
   // The datastore service to use for persisting the entity if updated.
@@ -127,7 +146,7 @@ class ShardState {
     shardState.setCounters(counters);
     
     shardState.setStatusString("");
-    shardState.entity.setProperty(STATUS_PROPERTY, "" + Status.ACTIVE);
+    shardState.entity.setProperty(STATUS_PROPERTY, Status.ACTIVE.name());
     
     return shardState;
   }
@@ -265,7 +284,11 @@ class ShardState {
    * Marks the current shard as done.
    */
   public void setDone() {
-    entity.setProperty("status", Status.DONE.toString());
+    entity.setProperty("status", Status.DONE.name());
+  }
+  
+  public void setError() {
+    entity.setProperty("status", Status.ERROR.name());
   }
   
   /**
