@@ -17,6 +17,7 @@
 package com.google.appengine.tools.mapreduce;
 
 import com.google.appengine.api.datastore.*;
+import com.google.appengine.repackaged.com.google.common.collect.Lists;
 import com.google.common.base.Preconditions;
 import com.googlecode.charts4j.*;
 import org.apache.hadoop.mapreduce.Counter;
@@ -60,7 +61,9 @@ public class MapReduceState {
    */
   public static enum Status {
     ACTIVE,
-    DONE, ERROR
+    DONE, 
+    ERROR,
+    ABORTED
   }
   
   // DatastoreService to persist the state to
@@ -395,6 +398,22 @@ public class MapReduceState {
   public void delete() {
     service.delete(entity.getKey());
   }
+  
+  /** 
+   * Marks the job as ABORTED and removes all ShardStates
+   */
+  public void abort() {
+    entity.setProperty(STATUS_PROPERTY, Status.ABORTED.name());
+    persist();
+    
+    List<ShardState> shards = ShardState.getShardStatesFromJobID(service, JobID.forName(getJobID()));
+    List<Key> shardKeys = Lists.newArrayList();
+    for(ShardState shard : shards) {
+      shardKeys.add(shard.getKey());
+    }
+    service.delete(shardKeys);
+  }
+  
   
   /**
    * Create json object from this one. If detailed is true creates an object

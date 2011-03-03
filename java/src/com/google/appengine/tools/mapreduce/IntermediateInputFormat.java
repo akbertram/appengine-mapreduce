@@ -59,7 +59,7 @@ public class IntermediateInputFormat extends InputFormat<String, RawValueList> {
       return Collections.singletonList(KeyedValueList.createSplit(mapperJobID, minKey, null));
     }
 
-    logger.severe("minKey = " + minKey +  ", maxKey = " + maxKey);
+    logger.fine("minKey = " + minKey +  ", maxKey = " + maxKey);
     
     List<String> splits = StringSplitUtil.splitStrings(minKey, maxKey, shardCount - 1);
     ImmutableList.Builder<InputSplit> listBuilder = new ImmutableList.Builder<InputSplit>();

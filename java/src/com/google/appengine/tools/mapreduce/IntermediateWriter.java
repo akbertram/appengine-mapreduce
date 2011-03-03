@@ -224,7 +224,7 @@ public class IntermediateWriter extends RecordWriter<OutputKey, Writable> {
         }
 
         if(!entitiesToWrite.isEmpty()) {
-          logger.info("Evicting " + entitiesToWrite.size() + " entities from builder cache");
+          logger.finest("Evicting " + entitiesToWrite.size() + " entities from builder cache");
         }
       }
       
