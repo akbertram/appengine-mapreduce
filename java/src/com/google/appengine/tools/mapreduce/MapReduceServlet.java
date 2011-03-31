@@ -679,7 +679,7 @@ public class MapReduceServlet extends HttpServlet {
       taskAttemptContext = new AppEngineTaskAttemptContext(
           request, jobContext, ds);
     } catch (Exception e) {
-      log.log(Level.SEVERE, "Exception retrieving shards from datastore, aborting shard.", e);
+      log.log(Level.INFO, "Exception retrieving shards from datastore (this job was probably cancelled), aborting shard.", e);
       return;
     }
     DatastorePersistingStatusReporter reporter =
@@ -728,6 +728,7 @@ public class MapReduceServlet extends HttpServlet {
         mapper.cleanup((Context) context);
       }
     } catch (Exception e) {
+      log.log(Level.SEVERE, "Map/Reduce shard failed: "+ e.getMessage(), e);
       rethrowIfTransient(e);
       reporter.setStatus(e.getClass().getSimpleName() + ": " + e.getMessage());
       reporter.setError();
