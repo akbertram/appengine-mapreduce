@@ -15,11 +15,11 @@
   <inceptionYear>2010</inceptionYear>
   <issueManagement>
     <system>Github</system>
-    <url>https://github.com/akbertram/appengine-mapreduce-community/issues</url>
+    <url>http://code.google.com/p/appengine-mapreduce/issues</url>
   </issueManagement>
   <scm>
-    <connection>scm:git://github.com/akbertram/appengine-mapreduce-community.git</connection>
-    <developerConnection>scm:svn:https://appengine-mapreduce.googlecode.com/svn/trunk/</developerConnection>
+    <connection>scm:git:git://github.com/akbertram/appengine-mapreduce.git</connection>
+    <developerConnection>scm:git:git://github.com/akbertram/appengine-mapreduce.git</developerConnection>
     <url>http://code.google.com/p/appengine-mapreduce/source/browse/</url>
   </scm>
   <licenses>
