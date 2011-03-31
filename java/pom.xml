@@ -18,8 +18,8 @@
     <url>http://code.google.com/p/appengine-mapreduce/issues</url>
   </issueManagement>
   <scm>
-    <connection>scm:git:git://github.com/akbertram/appengine-mapreduce.git</connection>
-    <developerConnection>scm:git:git://github.com/akbertram/appengine-mapreduce.git</developerConnection>
+    <connection>scm:git:git@github.com:akbertram/appengine-mapreduce.git</connection>
+    <developerConnection>scm:git@github.com:akbertram/appengine-mapreduce.git</developerConnection>
     <url>http://code.google.com/p/appengine-mapreduce/source/browse/</url>
   </scm>
   <licenses>
