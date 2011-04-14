@@ -24,6 +24,7 @@ import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.memcache.MemcacheServiceException;
 import com.google.appengine.api.memcache.MemcacheServiceFactory;
 import com.google.appengine.tools.mapreduce.ShardState.Status;
+import com.google.apphosting.api.ApiProxy;
 import com.google.apphosting.api.DeadlineExceededException;
 import com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
@@ -694,14 +695,18 @@ public class MapReduceServlet extends HttpServlet {
       InputSplit split = taskAttemptContext.getInputSplit();
       RecordReader<INKEY, INVALUE> reader = 
         (RecordReader<INKEY,INVALUE>) taskAttemptContext.getRecordReader(split);
-      RecordWriter<OUTKEY, OUTVALUE> writer =
-        (RecordWriter<OUTKEY, OUTVALUE>) new IntermediateWriter(ds, taskAttemptContext);
+      OutputFormat<OUTKEY, OUTVALUE> outputFormat =
+        (OutputFormat<OUTKEY, OUTVALUE>) taskAttemptContext.getOutputFormat();
 
+      RecordWriter<OUTKEY, OUTVALUE> writer = outputFormat.getRecordWriter(taskAttemptContext);
+      OutputCommitter outputCommitter = outputFormat.getOutputCommitter(taskAttemptContext);
+      
       AppEngineMapper.AppEngineContext context = getMapperContext(
           taskAttemptContext, mapper, split, reader, writer, reporter);
 
       if (jobContext.getSliceNumber() == 0) {
         // This is the first invocation for this mapper.
+        outputCommitter.setupTask(taskAttemptContext);
         mapper.setup((Context) context);
       }
 
@@ -717,7 +722,9 @@ public class MapReduceServlet extends HttpServlet {
 
       // This persists the shard state including the new record reader.
       reporter.persist();
-
+      
+      writer.close(taskAttemptContext);
+      
       consumer.dispose();
 
       if (shouldContinue) {
@@ -726,6 +733,9 @@ public class MapReduceServlet extends HttpServlet {
       } else {
         // This is the last invocation for this mapper.
         mapper.cleanup((Context) context);
+        
+        // commit the task output
+        outputCommitter.commitTask(taskAttemptContext);
       }
     } catch (Exception e) {
       log.log(Level.SEVERE, "Map/Reduce shard failed: "+ e.getMessage(), e);
@@ -748,6 +758,15 @@ public class MapReduceServlet extends HttpServlet {
     }
     if(e instanceof MemcacheServiceException) {
       throw (MemcacheServiceException)e;
+    }
+    if(e instanceof ApiProxy.ApiDeadlineExceededException) {
+      throw (ApiProxy.ApiDeadlineExceededException)e;
+    }
+    if(e instanceof ApiProxy.CancelledException) {
+      throw (ApiProxy.CancelledException)e;
+    }
+    if(e.getCause() instanceof Exception) {
+      rethrowIfTransient((Exception) e.getCause());
     }
   }
 

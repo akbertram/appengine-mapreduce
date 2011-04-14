@@ -26,7 +26,7 @@ public class IntermediateWriter extends RecordWriter<OutputKey, Writable> {
   private final AppEngineTaskAttemptContext context;
   private final DatastoreService datastoreService;
 
-  private static int DEFAULT_CACHE_SIZE = 1 << 17;
+  private static int DEFAULT_CACHE_SIZE = 1 << 16;
   
   private OutputKeyRange keyRange;
   private BuilderCache cache;
@@ -37,7 +37,16 @@ public class IntermediateWriter extends RecordWriter<OutputKey, Writable> {
 
 
   public IntermediateWriter(DatastoreService datastoreService, AppEngineTaskAttemptContext context) {
-    this(datastoreService, context, DEFAULT_CACHE_SIZE);
+    this(datastoreService, context, cacheSizeFromConfig(context));
+  }
+  
+  private static int cacheSizeFromConfig(AppEngineTaskAttemptContext context) {
+    String cacheSize = context.getConfiguration().get("com.google.appengine.intermediate.cache.size");
+    if(cacheSize != null) {
+      return Integer.parseInt(cacheSize);
+    } else {
+      return DEFAULT_CACHE_SIZE;
+    }
   }
 
   public IntermediateWriter(DatastoreService datastoreService, AppEngineTaskAttemptContext context, int cacheSize) {

@@ -16,18 +16,19 @@
 
 package com.google.appengine.tools.mapreduce;
 
-import com.google.appengine.api.datastore.DatastoreService;
-import com.google.appengine.api.datastore.EntityNotFoundException;
+import java.io.IOException;
+
+import javax.servlet.http.HttpServletRequest;
 
 import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.util.ReflectionUtils;
 
-import java.io.IOException;
-
-import javax.servlet.http.HttpServletRequest;
+import com.google.appengine.api.datastore.DatastoreService;
+import com.google.appengine.api.datastore.EntityNotFoundException;
 
 /**
  * This object is the analogue of {@link AppEngineJobContext} for the
@@ -159,6 +160,17 @@ public class AppEngineTaskAttemptContext extends TaskAttemptContext {
     try {
       return (AppEngineMapper<INKEY,INVALUE,OUTKEY,OUTVALUE>) 
       ReflectionUtils.newInstance(getMapperClass(), 
+        getConfiguration());
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Couldn't find mapper class.", e);
+    }
+  }
+  
+  @SuppressWarnings("unchecked")
+  public <OUTKEY, OUTVALUE> OutputFormat<OUTKEY, OUTVALUE> getOutputFormat() {
+    try {
+      return (OutputFormat<OUTKEY,OUTVALUE>)
+      ReflectionUtils.newInstance(getOutputFormatClass(), 
         getConfiguration());
     } catch (ClassNotFoundException e) {
       throw new RuntimeException("Couldn't find mapper class.", e);
