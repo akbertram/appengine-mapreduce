@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- This file overrides hadoop's defaults for the AppEngine Environment -->
+
+
+<configuration>
+
+
+<property>
+  <name>mapred.output.dir</name>
+  <value>appengine://blobstore/mapreduce</value>
+</property>
+
+
+</configuration>

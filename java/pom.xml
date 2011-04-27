@@ -135,6 +135,12 @@
         <directory>static</directory>
         <targetPath>${build.outputDirectory}/com/google/appengine/tools/mapreduce</targetPath>
       </resource>
+      <resource>
+      	<directory>src</directory>
+     	<includes>
+     		<include>*.xml</include>
+     	</includes>
+      </resource>
     </resources>
     <plugins>
       <plugin>

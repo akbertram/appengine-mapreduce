@@ -39,12 +39,15 @@ public class AppEngineFileSystemTest extends TestCase {
     helper.setUp();
   }
   
+  @Override
+  public void tearDown() {
+    helper.tearDown();
+  }
+  
   public void testMkdirs() throws IOException {
 
     Configuration conf = new Configuration();
-    conf.set("fs.default.name", "appengine://blobstore");
-    conf.setClass("fs.appengine.impl", AppEngineFileSystem.class, AppEngineFileSystem.class);
-    
+
     FileSystem fs = FileSystem.get(conf);
     
     fs.mkdirs(new Path("parent/child/folder"));
@@ -57,12 +60,19 @@ public class AppEngineFileSystemTest extends TestCase {
 
   }
   
+  public void testCreateImpliesMkDir() throws IOException {
+
+    Configuration conf = new Configuration();
+    FileSystem fs = FileSystem.get(conf);
+    
+    fs.create(new Path("parent/child/folder"));
+
+
+  }
+  
   public void testSequenceFile() throws IOException {
     
     Configuration conf = new Configuration();
-    conf.set("fs.default.name", "appengine://blobstore");
-    conf.setClass("fs.appengine.impl", AppEngineFileSystem.class, AppEngineFileSystem.class);
-    
     FileSystem fs = FileSystem.get(conf);
    
     // create individual files to merge

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- This file overrides hadoop's defaults for the AppEngine Environment -->
+
+<configuration>
+
+<property>
+  <name>fs.default.name</name>
+  <value>appengine://blobstore</value>
+  <description>The name of the default file system.  A URI whose
+  scheme and authority determine the FileSystem implementation.  The
+  uri's scheme determines the config property (fs.SCHEME.impl) naming
+  the FileSystem implementation class.  The uri's authority is used to
+  determine the host, port, etc. for a filesystem.</description>
+</property>
+
+<property> 
+  <name>fs.appengine.impl</name>
+  <value>com.google.appengine.tools.mapreduce.fs.AppEngineFileSystem</value>
+  <description>The FileSystem for appengine: URIs</description>
+</property>
+
+</configuration>
