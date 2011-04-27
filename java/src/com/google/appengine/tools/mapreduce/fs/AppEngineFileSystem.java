@@ -114,19 +114,14 @@ public class AppEngineFileSystem extends FileSystem {
     
     path = makeAbsolute(path);
     
-    if(!overwrite) {
-      try {
-        fileForPath(path);
+    if(!overwrite && exists(path)) {
         throw new IOException("File at path '" + path.toString() + "' already exists");
-      } catch(FileNotFoundException ignored) {
-        // not there
-      }
     }
     
     // check for parent folder
-    FileDescriptor parentFolder = descForPath(path.getParent());
-    if(!parentFolder.isDirectory()) {
-      throw new IOException(path.getParent().toString() + " is not a folder");
+    Path parent = path.getParent();
+    if(parent != null && !mkdirs(parent)) {
+      throw new IOException("Mkdirs failed to create " + parent.toString());
     }
     
     AppEngineFile file = fileService.createNewBlobFile("application/octet-stream");
@@ -155,20 +150,32 @@ public class AppEngineFileSystem extends FileSystem {
     try {
       srcDesc = new FileDescriptor( datastore.get(tx, keyForPath(src)) );
     } catch (EntityNotFoundException e) {
+      tx.rollback();
       throw new FileNotFoundException(src.toString());
     }
     if(srcDesc.isDirectory()) {
+      tx.rollback();
       throw new IOException("renaming directories is not supported");
     }
-    if(exists(dst)) {
-      throw new IOException("destination file " + dst.toString() + " already exists");
+
+    try {
+      FileDescriptor dstDesc = newFile(dst, srcDesc.getAppEngineFile());
+      
+      try { 
+        datastore.get(tx, srcDesc.getKey());
+        tx.rollback();
+        throw new IOException("destination file " + dst.toString() + " already exists");
+      } catch(EntityNotFoundException e) {
+        // we're ok, the dest file doesn't exist.
+      }
+            
+      datastore.put(tx, dstDesc.getEntity());
+      datastore.delete(tx, srcDesc.getKey());
+      tx.commit();
+    } catch(Exception e) {
+      tx.rollback();
+      throw new IOException("Exception thrown while renaming file", e);
     }
-    
-    FileDescriptor dstDesc = newFile(dst, srcDesc.getAppEngineFile());
-    datastore.put(tx, dstDesc.getEntity());
-    datastore.delete(tx, srcDesc.getKey());
-    tx.commit();
-    
     return true;
   }
 
@@ -247,7 +254,7 @@ public class AppEngineFileSystem extends FileSystem {
   private FileDescriptor newFile(Path path, AppEngineFile file) {
     FileDescriptor desc = new FileDescriptor();
     desc.entity = new Entity(keyForPath(path));
-    desc.entity.setProperty("parent", path.getParent());
+    desc.entity.setProperty("parent", path.getParent().toString());
     desc.entity.setUnindexedProperty("fullPath", file.getFullPath());
     desc.entity.setUnindexedProperty("creationTime", new Date().getTime());
     
