@@ -16,19 +16,13 @@
 
 package com.google.appengine.tools.mapreduce;
 
-import java.io.IOException;
-
-import javax.servlet.http.HttpServletRequest;
-
-import org.apache.hadoop.mapreduce.InputSplit;
-import org.apache.hadoop.mapreduce.OutputFormat;
-import org.apache.hadoop.mapreduce.RecordReader;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
-import org.apache.hadoop.util.ReflectionUtils;
-
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.EntityNotFoundException;
+import org.apache.hadoop.mapreduce.*;
+import org.apache.hadoop.util.ReflectionUtils;
+
+import javax.servlet.http.HttpServletRequest;
+import java.io.IOException;
 
 /**
  * This object is the analogue of {@link AppEngineJobContext} for the
@@ -43,7 +37,7 @@ import com.google.appengine.api.datastore.EntityNotFoundException;
  */
 public class AppEngineTaskAttemptContext extends TaskAttemptContext {
   // VisibleForTesting
-  static final String TASK_ATTEMPT_ID_PARAMETER_NAME = "taskAttemptID";
+  public static final String TASK_ATTEMPT_ID_PARAMETER_NAME = "taskAttemptID";
   
   private final ShardState state;
   
@@ -74,7 +68,7 @@ public class AppEngineTaskAttemptContext extends TaskAttemptContext {
   /**
    * Initialize the context from a task attempt ID, a context, and a shard state.
    */
-  AppEngineTaskAttemptContext(AppEngineJobContext jobContext, ShardState state,
+  public AppEngineTaskAttemptContext(AppEngineJobContext jobContext, ShardState state,
       TaskAttemptID taskAttemptId) {
     super(jobContext.getConfiguration(), taskAttemptId);
     this.state = state;

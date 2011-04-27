@@ -24,7 +24,7 @@ import com.google.appengine.api.memcache.MemcacheService;
  * @author frew@google.com (Fred Wulff)
  *
  */
-class QuotaManager {
+public class QuotaManager {
   /**
    * The default memcache namespace for quota buckets.
    */

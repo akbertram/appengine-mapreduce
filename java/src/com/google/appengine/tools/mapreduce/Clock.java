@@ -23,7 +23,7 @@ package com.google.appengine.tools.mapreduce;
  * 
  * @author frew@google.com (Fred Wulff)
  */
-interface Clock {
+public interface Clock {
   /**
    * Returns the current time as defined by the particular clock implementation
    * in milliseconds from the epoch.

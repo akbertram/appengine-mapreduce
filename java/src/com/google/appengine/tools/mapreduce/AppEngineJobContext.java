@@ -20,14 +20,12 @@ import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.google.appengine.api.datastore.EntityNotFoundException;
 import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.QueueFactory;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.JobID;
 
-import java.util.UUID;
-
 import javax.servlet.http.HttpServletRequest;
+import java.util.UUID;
 
 /**
  * AppEngineJobContext extends Hadoop's JobContext to make extracting
@@ -91,8 +89,8 @@ public class AppEngineJobContext extends JobContext {
   // Parameter names for values serialized in the request
   // All VisibleForTesting
   static final String CONFIGURATION_PARAMETER_NAME = "configuration";
-  static final String JOB_ID_PARAMETER_NAME = "jobID";
-  static final String SLICE_NUMBER_PARAMETER_NAME = "sliceNumber";
+  public static final String JOB_ID_PARAMETER_NAME = "jobID";
+  public static final String SLICE_NUMBER_PARAMETER_NAME = "sliceNumber";
   
   /**
    * Default rate of map() calls

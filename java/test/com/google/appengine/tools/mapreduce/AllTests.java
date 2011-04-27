@@ -16,6 +16,7 @@
 
 package com.google.appengine.tools.mapreduce;
 
+import com.google.appengine.tools.mapreduce.fs.AppEngineFileSystemTest;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
@@ -47,6 +48,9 @@ public class AllTests extends TestCase {
     suite.addTestSuite(InputStreamIteratorTest.class);
     suite.addTestSuite(RangeInputFormatTest.class);
     suite.addTestSuite(RangeRecordReaderTest.class);
+
+    // AppengineFS
+    suite.addTestSuite(AppEngineFileSystemTest.class);
 
     // Reducer stuff
     suite.addTestSuite(IntermediateInputFormatTest.class);

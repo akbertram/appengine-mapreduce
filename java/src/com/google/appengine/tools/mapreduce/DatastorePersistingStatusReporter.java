@@ -28,7 +28,7 @@ import java.util.logging.Logger;
  * 
  * @author frew@google.com (Fred Wulff)
  */
-class DatastorePersistingStatusReporter extends StatusReporter {
+public class DatastorePersistingStatusReporter extends StatusReporter {
   private static final Logger log = Logger.getLogger(
       DatastorePersistingStatusReporter.class.getName());
   
@@ -78,7 +78,7 @@ class DatastorePersistingStatusReporter extends StatusReporter {
   /**
    * Persist the underlying state of this shard.
    */
-  void persist() {
+  public void persist() {
     shardState.setCounters(counters);
     shardState.setStatusString(status);
     shardState.persist();

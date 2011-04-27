@@ -25,7 +25,7 @@ package com.google.appengine.tools.mapreduce;
  * 
  * @author frew@google.com (Fred Wulff)
  */
-class HadoopCounterNames {
+public class HadoopCounterNames {
   private HadoopCounterNames() {
     
   }

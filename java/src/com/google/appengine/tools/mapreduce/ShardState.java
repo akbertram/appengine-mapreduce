@@ -45,7 +45,7 @@ import java.util.List;
  * @author frew@google.com (Fred Wulff)
  *
  */
-class ShardState {
+public class ShardState {
   // Property names in the shard state entity
   // VisibleForTesting
   static final String COUNTERS_MAP_PROPERTY = "countersMap";
